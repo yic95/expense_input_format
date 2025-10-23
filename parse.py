@@ -3,30 +3,27 @@ import sys
 
 
 def parse_single_dsl_entry(string: str):
-    """Parse the string as a single entry.
+    """Parse the string as a single entry with falsy default value.
 
-    The string is seperated into typed segments by [comma], [at],
-    [slash]. The segment type is determined by the seperator in front
-    of the segment: Commas for 'tags', ats for 'date', slash for
-    'title'. Only segments of type 'tags' can be specified multiple
-    times. If other segment types are repeated, only the first will be
-    used. The first segment is of type 'expense', and all characters
-    after the first slash in the string will be parsed as part of title.
+    The DSL is specified as follows:
+        entry   ::= [expense] [segment]* [title]
+        expense ::= digits
+        segment ::= segment-prefix [segment-content]
+        segment-prefix  ::= ',' | '@'  # [comma] for tags; [at] for date
+        segment-content ::= [char - ',' - '@' - '/']*
+        title   ::= '/' [string]
+    The result includes keys "expense", "date", "tags" and "title" with
+    falsy default value. The "date" element can only be specified once.
     """
-    # TODO Add dot-escaped literal character
     info = {'expense': "",
             'title': "",
             'date': "",
             'tags': []}
     def store_segment(seg_type, seg, buf):
         if seg_type == 'tags':
-            buf['tags'].append(''.join(seg))
-        elif seg_type == 'date' and buf['date'] == "":
-            buf['date'] = ''.join(seg)
-        elif seg_type == 'expense' and buf['expense'] == "":
-            buf['expense'] = ''.join(seg)
-        elif seg_type == 'title' and buf['title'] == "":
-            buf['title'] = ''.join(seg)
+            buf['tags'].append("".join(seg))
+        else:
+            buf[seg_type] = "".join(seg)
     segment = []
     segment_type = "expense"
 
@@ -46,7 +43,6 @@ def parse_single_dsl_entry(string: str):
         else:
             segment.append(i)
     store_segment(segment_type, segment, info)
-    info['tags'].sort()
     return info
 
 
@@ -75,41 +71,47 @@ def parse_arguemnt_entries(arguments: [str], default_info: dict = False) -> [dic
     return result
 
 
-def format_entry(entry_info: dict) -> str:
-    """Format entry information into TSV.
+def format_entry(entries: [dict]) -> [str]:
+    """Format entries into list of TSV rows.
 
     The columns are: 'date', 'seq', 'expense', 'tags and title'. The
     tags are prepended in front of title, seperated and surrounded by
     double colon (::). The result does not include column title.
     """
     result = []
-    if 'date' in entry_info and entry_info['date']:
-        result.append(entry_info['date'])
-    result.append('\t')
+    for ent in entries:
+        fmt_ent = []
+        if 'date' in ent and ent['date']:
+            fmt_ent.append(ent['date'])
+        fmt_ent.append('\t')
 
-    if 'seq' in entry_info and entry_info['seq']:
-        result.append(entry_info['seq'])
-    result.append('\t')
+        if 'seq' in ent and ent['seq']:
+            fmt_ent.append(ent['seq'])
+        fmt_ent.append('\t')
 
-    if 'expense' in entry_info and entry_info['expense']:
-        result.append(entry_info['expense'])
-    result.append('\t')
-    
-    if 'tags' in entry_info and entry_info['tags']:
-        result.append('::')
-        for t in entry_info['tags']:
-            result.append(t)
-            result.append('::')
+        if 'expense' in ent and ent['expense']:
+            fmt_ent.append(ent['expense'])
+        fmt_ent.append('\t')
+        
+        if 'tags' in ent and ent['tags']:
+            fmt_ent.append('::')
+            for t in ent['tags']:
+                fmt_ent.append(t)
+                fmt_ent.append('::')
 
-    if 'title' in entry_info and entry_info['title']:
-        result.append(entry_info['title'])
-    result.append('\n')
+        if 'title' in ent and ent['title']:
+            fmt_ent.append(ent['title'])
+        result.append("".join(fmt_ent))
 
-    return ''.join(result)
+    return result
 
 
 def fix_tag_hierarchy(entries: [dict], hier) -> [dict]:
-    pass
+    """Remove repeated tags and add the parent tag of each tag.
+    """
+    for ent in entries:
+        ent['tags'] = list(set(ent['tags']))
+    return entries
 
 
 def add_default_info(entries: [dict], info: dict):
@@ -136,7 +138,8 @@ def add_sequence_number(entries: [dict],
     """Add sequence number to entries, starting at `start`, step by 1.
 
     If `overwrite` is False, the original sequence numbers of entries 
-    would be preserved, and are guaranteed to be unique among the list."""
+    would be preserved, and are guaranteed to be unique among the list.
+    """
     existing_seq = []
     if not overwrite:
         for ent in entries:
@@ -154,7 +157,7 @@ def add_sequence_number(entries: [dict],
 
 if __name__ == '__main__':
     tinfos = parse_arguemnt_entries(sys.argv[1::])
-    add_default_info(tinfos, {'title': '--untitled--'})
-    add_sequence_number(tinfos)
+    # add_default_info(tinfos, {'title': '--untitled--'})
+    # add_sequence_number(tinfos)
     
     #print(tinfos)
