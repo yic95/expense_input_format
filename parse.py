@@ -106,11 +106,21 @@ def format_entry(entries: [dict]) -> [str]:
     return result
 
 
-def fix_tag_hierarchy(entries: [dict], hier) -> [dict]:
+def fix_tag_hierarchy(entries: [dict], hier: dict) -> [dict]:
     """Remove repeated tags and add the parent tag of each tag.
+
+    The keys of hier is a child tag of their value. No order is preserved.
     """
     for ent in entries:
-        ent['tags'] = list(set(ent['tags']))
+        result_set = set()
+        for t in ent['tags']:
+            tag = t
+            result_set.add(tag)
+            while tag in hier and hier[tag] not in result_set:
+                result_set.add(hier[tag])
+                tag = hier[tag]
+        ent['tags'] = list(result_set)
+
     return entries
 
 
@@ -157,7 +167,15 @@ def add_sequence_number(entries: [dict],
 
 if __name__ == '__main__':
     tinfos = parse_arguemnt_entries(sys.argv[1::])
+    tag_hier = {
+        'meal': 'food',
+        'breakfast': 'meal',
+        'lunch': 'meal',
+        'dinner': 'meal',
+        'drinks': 'food'
+    }
     # add_default_info(tinfos, {'title': '--untitled--'})
-    # add_sequence_number(tinfos)
+    fix_tag_hierarchy(tinfos, tag_hier)
+    #add_sequence_number(tinfos)
     
     #print(tinfos)
