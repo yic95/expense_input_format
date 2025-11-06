@@ -28,6 +28,8 @@ def parse_single_dsl_entry(string: str):
     segment_type = "expense"
 
     for i in string:
+        if i in {'\0', '\n', '\r', '\t'}:
+            continue
         if i == '/' and segment_type != 'title':
             store_segment(segment_type, segment, info)
             segment.clear()
@@ -46,7 +48,7 @@ def parse_single_dsl_entry(string: str):
     return info
 
 
-def parse_arguemnt_entries(arguments: [str], default_info: dict = False) -> [dict]:
+def parse_arguemnt_entries(arguments: [str]) -> [dict]:
     """Parse a string as single or multiple entries.
 
     If the substring after the first space is of segment type 'title',
@@ -54,10 +56,9 @@ def parse_arguemnt_entries(arguments: [str], default_info: dict = False) -> [dic
     being part of the title. Otherwise, the entire string is parsed as
     multiple entries, seperated by spaces.
     """
-    if not default_info:
-        default_info = {}
-    default_keys = default_info.keys()
     result = []
+    if not arguments:
+        return result
     if len(arguments) < 2 \
         or (not set(arguments[1]).intersection(set('/,@'))
             and not arguments[1].isnumeric()):
@@ -68,6 +69,29 @@ def parse_arguemnt_entries(arguments: [str], default_info: dict = False) -> [dic
     else:
         for e in arguments:
             result.append(parse_single_dsl_entry(e))
+    return result
+
+
+def parse_tsv_entries(entries: [str], skip_header: bool = False) -> [dict]:
+    columns = ('date', 'seq', 'expense', 'title', 'tags')
+    start = 1 if skip_header else 0
+    result = []
+    for row in entries[start::] :
+        ent_dict = {'date': '',
+                    'seq': '',
+                    'expense': '',
+                    'title': '',
+                    'tags': []}
+        for name, cell in zip(columns, row.split('\t')):
+            if cell == '::::':
+                continue
+            if name == 'tags':
+                if len(cell) > 3:
+                    ent_dict[name] = cell[2:-2:].split('::')
+            else:
+                ent_dict[name] = cell
+        result.append(ent_dict)
+
     return result
 
 
@@ -83,6 +107,8 @@ def format_entry(entries: [dict]) -> [str]:
         fmt_ent = []
         if 'date' in ent and ent['date']:
             fmt_ent.append(ent['date'])
+        else:
+            fmt_ent.append('::::')
         fmt_ent.append('\t')
 
         if 'seq' in ent and ent['seq']:
@@ -92,34 +118,42 @@ def format_entry(entries: [dict]) -> [str]:
         if 'expense' in ent and ent['expense']:
             fmt_ent.append(ent['expense'])
         fmt_ent.append('\t')
-        
-        if 'tags' in ent and ent['tags']:
-            fmt_ent.append('::')
-            for t in ent['tags']:
-                fmt_ent.append(t)
-                fmt_ent.append('::')
 
         if 'title' in ent and ent['title']:
             fmt_ent.append(ent['title'])
+        else:
+            fmt_ent.append('::::')
+        fmt_ent.append('\t')
+
+        if 'tags' in ent:
+            # empty tag field will be formatted as "::::"
+            fmt_ent.append('::')
+            if ent['tags']:
+                for t in ent['tags'][0:-1:]:
+                    fmt_ent.append(t)
+                    fmt_ent.append('::')
+                fmt_ent.append(ent['tags'][-1])
+            fmt_ent.append('::')
+
         result.append("".join(fmt_ent))
 
     return result
 
 
-def fix_tag_hierarchy(entries: [dict], hier: dict) -> [dict]:
+def fix_tag_hierarchy(entries: [dict], hier: dict[str, str]) -> [dict]:
     """Remove repeated tags and add the parent tag of each tag.
 
     The keys of hier is a child tag of their value. No order is preserved.
     """
     for ent in entries:
-        result_set = set()
+        result = set()
         for t in ent['tags']:
             tag = t
-            result_set.add(tag)
-            while tag in hier and hier[tag] not in result_set:
-                result_set.add(hier[tag])
+            result.add(tag)
+            while tag in hier and hier[tag] not in result:
+                result.add(hier[tag])
                 tag = hier[tag]
-        ent['tags'] = list(result_set)
+        ent['tags'] = list(result)
 
     return entries
 
@@ -141,6 +175,7 @@ def add_default_info(entries: [dict], info: dict):
             for ent in entries:
                 if dk not in ent or not ent[dk]:
                     ent[dk] = dv
+
 
 def add_sequence_number(entries: [dict],
                         start: int = 1,
@@ -165,17 +200,38 @@ def add_sequence_number(entries: [dict],
             seq_num += 1
 
 
+def is_hierarchy_valid(hier: dict[str, str]) -> bool:
+    """Return True if there are no cycles or loops"""
+    valid_nodes = set()
+    for node_checking in hier:
+        if node_checking in valid_nodes:
+            continue
+        history_node = set(node_checking)
+        k = node_checking
+        while k in hier:
+            k = hier[k]
+            if k in history_node:
+                return False
+            history_node.add(k)
+        valid_nodes |= history_node
+    return True
+
 if __name__ == '__main__':
-    tinfos = parse_arguemnt_entries(sys.argv[1::])
-    tag_hier = {
-        'meal': 'food',
-        'breakfast': 'meal',
-        'lunch': 'meal',
-        'dinner': 'meal',
-        'drinks': 'food'
+    hier = {
+        'a': 'b',
+        'c': 'b',
+        'b': 'd',
+        'e': 'f',
+        'f': 'g',
+        'h': 'f'
     }
-    # add_default_info(tinfos, {'title': '--untitled--'})
-    fix_tag_hierarchy(tinfos, tag_hier)
-    #add_sequence_number(tinfos)
-    
-    #print(tinfos)
+    invalid_hier = {
+        'a': 'b',
+        'b': 'c',
+        'c': 'a'
+    }
+    invalid_hier_2 = {
+        'a': 'a'
+    }
+
+    print(is_hierarchy_valid(hier), is_hierarchy_valid(invalid_hier_2))
