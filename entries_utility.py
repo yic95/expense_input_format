@@ -242,7 +242,7 @@ def to_typed_entries(entries: [dict[str, str]],
         inval_cell = {}
     conv = {'seq': int,
             'expense': float,
-            'date': lambda s: datetime.datetime.strptime(s).date()}
+            'date': lambda s: datetime.datetime.strptime(s, '%Y-%m-%d').date()}
     for idx, ent in enumerate(entries):
         for k, c in conv.items():
             if k in ent:
@@ -250,6 +250,7 @@ def to_typed_entries(entries: [dict[str, str]],
                     ent[k] = c(ent[k])
                 except (ValueError, TypeError):
                     if list_invalid_cells:
+                        inval_cell[idx] = {}
                         inval_cell[idx][k] = ent[k]
                     ent.pop(k)
     if list_invalid_cells:
@@ -260,7 +261,7 @@ def query(entries: [dict], query: dict[str, str]) -> [dict]:
     pass
 
 if __name__ == '__main__':
-    idol_ent = parse_single_dsl_entry(' '.join(sys.argv[1::]))
-    print(idol_ent)
-    to_typed_entry(idol_ent)
-    print(idol_ent)
+    ents = parse_arguemnt_entries(sys.argv[1::])
+    invals = to_typed_entries(ents, False)
+    print(ents)
+    print(invals)
