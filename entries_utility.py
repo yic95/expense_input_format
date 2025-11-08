@@ -1,8 +1,9 @@
 #!/usr/bin/python
 import sys
+import datetime
 
-
-def parse_single_dsl_entry(string: str, multiple_date: bool=False):
+def parse_single_dsl_entry(string: str,
+                           multiple_date: bool=False) -> dict[str, str]:
     """Parse the string as a single entry with falsy default value.
 
     The DSL is specified as follows:
@@ -10,7 +11,7 @@ def parse_single_dsl_entry(string: str, multiple_date: bool=False):
         expense ::= digits
         segment ::= segment-prefix [segment-content]
         segment-prefix  ::= ':' | '@'  # [colon] for tags; [at] for date
-        segment-content ::= [char - ',' - '@' - '/']*
+        segment-content ::= [char - ':' - '@' - '/']*
         title   ::= '/' [string]
     The result includes keys "expense", "date", "tags" and "title" with
     falsy default value. The "date" element can only be specified once
@@ -51,7 +52,7 @@ def parse_single_dsl_entry(string: str, multiple_date: bool=False):
     return info
 
 
-def parse_arguemnt_entries(arguments: [str]) -> [dict]:
+def parse_arguemnt_entries(arguments: [str]) -> [dict[str, str]]:
     """Parse a string as single or multiple entries.
 
     If the substring after the first space is of segment type 'title',
@@ -101,8 +102,8 @@ def parse_tsv_entries(entries: [str], skip_header: bool = False) -> [dict]:
 def format_entry(entries: [dict]) -> [str]:
     """Format entries into list of TSV rows.
 
-    The columns are: 'date', 'seq', 'expense', 'title', 'tags'. The
-    tags are seperated and surrounded by double colon (::).
+    The columns are: 'date', 'seq', 'expense', 'title', 'tags'.
+    The tags are seperated and surrounded by double colon (::).
     The result does not include column title.
     """
     result = []
@@ -180,7 +181,8 @@ def add_default_info(entries: [dict], info: dict):
                     ent[dk] = dv
 
 
-def add_sequence_number(entries: [dict],
+# Only untyped ones since this will only be used on input
+def add_sequence_number(entries: [dict[str, str]],
                         start: int = 1,
                         overwrite: bool = False):
     """Add sequence number to entries, starting at `start`, step by 1.
@@ -229,6 +231,36 @@ def parse_query_string(query: str) -> dict:
     return entry
 
 
+def to_typed_entries(entries: [dict[str, str]],
+                     list_invalid_cells: bool=False) -> dict[int, dict[str, str]]:
+    """Convert str-valued entries into properly typed ones.
+
+    Converts seq to int, expense to float, date to datetime.date. Invalid
+    cells are returned when list_invalid_cells is true.
+    """
+    if list_invalid_cells:
+        inval_cell = {}
+    conv = {'seq': int,
+            'expense': float,
+            'date': lambda s: datetime.datetime.strptime(s).date()}
+    for idx, ent in enumerate(entries):
+        for k, c in conv.items():
+            if k in ent:
+                try:
+                    ent[k] = c(ent[k])
+                except (ValueError, TypeError):
+                    if list_invalid_cells:
+                        inval_cell[idx][k] = ent[k]
+                    ent.pop(k)
+    if list_invalid_cells:
+        return inval_cell
+
+
+def query(entries: [dict], query: dict[str, str]) -> [dict]:
+    pass
+
 if __name__ == '__main__':
-    idol_ent = parse_query_string(sys.argv[1])
+    idol_ent = parse_single_dsl_entry(' '.join(sys.argv[1::]))
+    print(idol_ent)
+    to_typed_entry(idol_ent)
     print(idol_ent)
