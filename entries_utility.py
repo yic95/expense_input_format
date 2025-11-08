@@ -2,26 +2,29 @@
 import sys
 
 
-def parse_single_dsl_entry(string: str):
+def parse_single_dsl_entry(string: str, multiple_date: bool=False):
     """Parse the string as a single entry with falsy default value.
 
     The DSL is specified as follows:
         entry   ::= [expense] [segment]* [title]
         expense ::= digits
         segment ::= segment-prefix [segment-content]
-        segment-prefix  ::= ',' | '@'  # [comma] for tags; [at] for date
+        segment-prefix  ::= ':' | '@'  # [colon] for tags; [at] for date
         segment-content ::= [char - ',' - '@' - '/']*
         title   ::= '/' [string]
     The result includes keys "expense", "date", "tags" and "title" with
-    falsy default value. The "date" element can only be specified once.
+    falsy default value. The "date" element can only be specified once
+    unless `multiple_date` is true. 
     """
     info = {'expense': "",
             'title': "",
-            'date': "",
+            'date': [] if multiple_date else "",
             'tags': []}
     def store_segment(seg_type, seg, buf):
         if seg_type == 'tags':
             buf['tags'].append("".join(seg))
+        elif seg_type == 'date' and multiple_date:
+            buf['date'].append("".join(seg))
         else:
             buf[seg_type] = "".join(seg)
     segment = []
@@ -38,7 +41,7 @@ def parse_single_dsl_entry(string: str):
             store_segment(segment_type, segment, info)
             segment.clear()
             segment_type = 'date'
-        elif i == ',' and segment_type != 'title':
+        elif i == ':' and segment_type != 'title':
             store_segment(segment_type, segment, info)
             segment.clear()
             segment_type = 'tags'
@@ -98,9 +101,9 @@ def parse_tsv_entries(entries: [str], skip_header: bool = False) -> [dict]:
 def format_entry(entries: [dict]) -> [str]:
     """Format entries into list of TSV rows.
 
-    The columns are: 'date', 'seq', 'expense', 'tags and title'. The
-    tags are prepended in front of title, seperated and surrounded by
-    double colon (::). The result does not include column title.
+    The columns are: 'date', 'seq', 'expense', 'title', 'tags'. The
+    tags are seperated and surrounded by double colon (::).
+    The result does not include column title.
     """
     result = []
     for ent in entries:
@@ -216,22 +219,16 @@ def is_hierarchy_valid(hier: dict[str, str]) -> bool:
         valid_nodes |= history_node
     return True
 
-if __name__ == '__main__':
-    hier = {
-        'a': 'b',
-        'c': 'b',
-        'b': 'd',
-        'e': 'f',
-        'f': 'g',
-        'h': 'f'
-    }
-    invalid_hier = {
-        'a': 'b',
-        'b': 'c',
-        'c': 'a'
-    }
-    invalid_hier_2 = {
-        'a': 'a'
-    }
 
-    print(is_hierarchy_valid(hier), is_hierarchy_valid(invalid_hier_2))
+def parse_query_string(query: str) -> dict:
+    entry = parse_single_dsl_entry(query, multiple_date=True)
+    for k in ('date', 'tags'):
+        entry[k] = [s.split(',') for s in entry[k]]
+    if 'expense' in entry:
+        entry['expense'] = entry['expense'].split(',')
+    return entry
+
+
+if __name__ == '__main__':
+    idol_ent = parse_query_string(sys.argv[1])
+    print(idol_ent)
